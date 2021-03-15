@@ -1,10 +1,17 @@
+#include <SPI.h>  
+#include "RF24.h"
 #include <Wire.h>
 #include <VirtualWire.h>
-const int flexPin0 = A1; //pin A0 to read analog input
-const int flexPin1 = A2;
-const int flexPin2 = A3;
-const int flexPin3 = A4;
-const int flexPin4 = A5;
+
+
+RF24 myRadio (7, 8);
+const int flexPin0 = A0; //pin A0 to read analog input
+const int flexPin1 = A1;
+const int flexPin2 = A2;
+const int flexPin3 = A3;
+const int flexPin4 = A4;
+//const int nacisk = A5;
+//int silanacisku=0;
 /*int readD1=0;
 int readD2=0;
 int readD3=0;
@@ -26,16 +33,32 @@ float roll, pitch, yaw;
 float AccErrorX, AccErrorY, GyroErrorX, GyroErrorY, GyroErrorZ;
 float elapsedTime, currentTime, previousTime;
 int c = 0;
-void setup(){
-/*pinMode(Pin_D1,OUTPUT);
-pinMode(Pin_D2,OUTPUT);
-pinMode(Pin_D3,OUTPUT);
-pinMode(Pin_D4,OUTPUT);
-pinMode(Pin_D5,OUTPUT);*/
+byte addresses[][6] = {"0"};
+char buf[200],wiadomosc1[32],wiadomosc2[32];
 
-Serial.begin(115200);
-// Initialize MPU6050
-  Wire.begin();                      // Initialize comunication
+
+struct package
+{
+  int id=1;
+  float temperature = 18.3;
+  char  text[100] = "Text to be transmitted";
+};
+
+
+typedef struct package Package;
+Package data;
+
+
+void setup()
+{
+  Serial.begin(115200);
+  delay(1000);
+  myRadio.begin();  
+  myRadio.setChannel(115); 
+  myRadio.setPALevel(RF24_PA_MAX);
+  myRadio.setDataRate( RF24_250KBPS ) ; 
+  myRadio.openWritingPipe( addresses[0]);
+    Wire.begin();                      // Initialize comunication
   Wire.beginTransmission(MPU);       // Start communication with MPU6050 // MPU=0x68
   Wire.write(0x6B);                  // Talk to the register 6B
   Wire.write(0x00);                  // Make reset - place a 0 into the 6B register
@@ -55,64 +78,12 @@ Serial.begin(115200);
   */
   // Call this function if you need to get the IMU error values for your module
   calculate_IMU_error();
-  delay(20);
-  vw_set_ptt_inverted(true); // Required for DR3100
-    vw_setup(2000);   // Bits per sec
-vw_rx_start();
+  delay(1000);
 }
-/*
-int analogRead1(){
-  digitalWrite(Pin_D1,HIGH);
-  digitalWrite(Pin_D2,LOW);
-  digitalWrite(Pin_D3,LOW);
-  digitalWrite(Pin_D4,LOW);
-  digitalWrite(Pin_D5,LOW);
-  return analogRead(0);
-}
-int analogRead2(){
-  digitalWrite(Pin_D1,LOW);
-  digitalWrite(Pin_D2,HIGH);
-  digitalWrite(Pin_D3,LOW);
-  digitalWrite(Pin_D4,LOW);
-  digitalWrite(Pin_D5,LOW);
-  return analogRead(1);
-}
-int analogRead3(){
-  digitalWrite(Pin_D1,LOW);
-  digitalWrite(Pin_D2,LOW);
-  digitalWrite(Pin_D3,HIGH);
-  digitalWrite(Pin_D4,LOW);
-  digitalWrite(Pin_D5,LOW);
-  return analogRead(2);
-}
-int analogRead4(){
-  digitalWrite(Pin_D1,LOW);
-  digitalWrite(Pin_D2,LOW);
-  digitalWrite(Pin_D3,LOW);
-  digitalWrite(Pin_D4,HIGH);
-  digitalWrite(Pin_D5,LOW);
-  return analogRead(3);
-}
-int analogRead5(){
-  digitalWrite(Pin_D1,LOW);
-  digitalWrite(Pin_D2,LOW);
-  digitalWrite(Pin_D3,LOW);
-  digitalWrite(Pin_D4,LOW);
-  digitalWrite(Pin_D5,HIGH);
-  return analogRead(4);
-}*/
-void loop(){
-/* readD1=analogRead1();
- delay(50);
- readD2=analogRead2();
- delay(50);
- readD3=analogRead3();
- delay(50);
- readD4=analogRead4();
- delay(50);
- readD5=analogRead5();
- delay(50);*/
- Wire.beginTransmission(MPU);
+
+void loop()
+{
+  Wire.beginTransmission(MPU);
   Wire.write(0x3B); // Start with register 0x3B (ACCEL_XOUT_H)
   Wire.endTransmission(false);
   Wire.requestFrom(MPU, 6, true); // Read 6 registers total, each axis value is stored in 2 registers
@@ -145,42 +116,33 @@ void loop(){
   // Complementary filter - combine acceleromter and gyro angle values
   roll = 0.96 * gyroAngleX + 0.04 * accAngleX;
   pitch = 0.96 * gyroAngleY + 0.04 * accAngleY;
+ //  silanacisku = analogRead(nacisk);  // read the input pin
+  //Serial.println(silanacisku);  
   //Serial.println(String(analogRead(flexPin0)) +" "+ String(analogRead(flexPin1)) +" "+ String(analogRead(flexPin2))+" "+String(analogRead(flexPin3))+" "+String(analogRead(flexPin4))+" "+String(GyroX)+" "+String(GyroY)+" "+String(GyroZ));
  wiadomosc=String(analogRead(flexPin0)) +" "+ String(analogRead(flexPin1)) +" "+ String(analogRead(flexPin2))+" "+String(analogRead(flexPin3))+" "+String(analogRead(flexPin4))+" "+String(GyroX)+" "+String(GyroY)+" "+String(GyroZ); 
- delay(100);//Print value 
+ //wiadomosc="01234567890123456789012345678901234567890123456789012345678901234567890";
+ delay(100);//Print value
 
- uint8_t buf[VW_MAX_MESSAGE_LEN];
-    uint8_t buflen = VW_MAX_MESSAGE_LEN;
-
-    if (vw_get_message(buf, &buflen)) // Non-blocking
-    {
- int i;
-//Serial.println("hello");
-        digitalWrite(13, true); // Flash a light to show received good message
-  // Message with a good checksum received, dump it.
-  //Serial.print("Got: ");
-  
-  for (i = 0; i < buflen; i++)
-  {
-      
-      char myArray = {buf[i]};
-      Serial.print(myArray);
-      
-      //Serial.print(" ");
+ wiadomosc.toCharArray(buf, wiadomosc.length() ) ;
+   for(int i=0;i<32;i++){
+  wiadomosc1[i]=buf[i];
+  wiadomosc2[i]=buf[32+i];
   }
-  Serial.println("");
-        digitalWrite(13, false);
-    }
-  const char *msg =wiadomosc.c_str();
+  myRadio.write(wiadomosc1, sizeof(wiadomosc1)); 
+  myRadio.write(wiadomosc2, sizeof(wiadomosc2)); 
 
-    digitalWrite(13, true); // Flash a light to show transmitting
-    vw_send((uint8_t *)msg, strlen(msg));
-    vw_wait_tx(); // Wait until the whole message is gone
-    
-    digitalWrite(13, false);
-    delay(100);
-delay(100);   
- 
+  //Serial.print("\nPackage:");
+ // Serial.print(data.id);
+  //Serial.print("\n");
+ // Serial.println(data.temperature);
+ // Serial.println(data.text);
+ for(int i=0;i<sizeof(buf);i++)
+  Serial.print(buf[i]);
+  Serial.println();
+ // data.id = data.id + 1;
+ // data.temperature = data.temperature+0.1;
+  delay(100);
+
 }
 void calculate_IMU_error() {
   // We can call this funtion in the setup section to calculate the accelerometer and gyro data error. From here we will get the error values used in the above equations printed on the Serial Monitor.
